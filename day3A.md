@@ -1,7 +1,7 @@
 
 ---
 
-# 🧨 BAD PAYMENT MODULE (Starting Point)
+# 🔴 Starting Point – Poorly Designed Payment Module
 
 ```java
 class PaymentProcessor {
@@ -13,20 +13,19 @@ class PaymentProcessor {
         }
 
         if (type.equals("CARD")) {
-            System.out.println("Processing card payment");
+            System.out.println("Processing card");
         } else if (type.equals("UPI")) {
-            System.out.println("Processing UPI payment");
+            System.out.println("Processing UPI");
         }
 
-        System.out.println("Saving to database");
+        System.out.println("Saving transaction");
         System.out.println("Generating receipt");
-        System.out.println("Sending SMS");
+        System.out.println("Sending notification");
     }
 }
 ```
 
-Problems exist.
-Now we identify and fix them one by one.
+Now we refactor step by step.
 
 ---
 
@@ -37,24 +36,16 @@ Now we identify and fix them one by one.
 ## Concept (What / Why / When / Where / How)
 
 **What**
-One class → one job.
+One class should have only one job.
 
 **Why**
-If a class has many jobs, small changes break many things.
+If one class handles many responsibilities, small changes affect unrelated logic.
 
 **When**
-When validation, logging, DB, payment logic are mixed.
+When validation, business logic, persistence, and notification are mixed.
 
-**Where (Banking Example)**
-When customer pays ₹2,000 using card:
-
-* validate
-* process payment
-* save transaction
-* generate receipt
-* send SMS
-
-All inside one class → risky.
+**Where**
+Any service class doing too many things.
 
 **How**
 Split responsibilities into separate classes.
@@ -63,42 +54,39 @@ Split responsibilities into separate classes.
 
 ## Scenario
 
-Bank wants to change SMS provider.
-
-Current design forces editing PaymentProcessor.
+Receipt format needs to change.
 
 ---
 
 ## Goal
 
-Make SMS change without touching payment logic.
+Change receipt logic without touching payment logic.
 
 ---
 
 ## What Can Go Wrong
 
-* Change in receipt breaks payment.
-* Change in DB breaks payment.
+* Changing receipt breaks payment flow.
 * Hard to test.
-* Hard to maintain.
+* Code becomes large and messy.
 
 ---
 
-## ❌ Incorrect Example (Already Seen Above)
+## ❌ Incorrect Example
 
-One class doing everything.
+All logic inside `PaymentProcessor`.
 
 ---
 
 ## Why It Fails
 
-It has 5 responsibilities:
+It does:
 
-* validation
-* payment routing
-* persistence
-* receipt
-* notification
+* Validation
+* Payment handling
+* Saving
+* Receipt
+* Notification
 
 Many reasons to change.
 
@@ -109,9 +97,8 @@ Many reasons to change.
 ```java
 class PaymentValidator {
     void validate(double amount) {
-        if (amount <= 0) {
+        if (amount <= 0)
             throw new IllegalArgumentException("Invalid amount");
-        }
     }
 }
 
@@ -122,8 +109,8 @@ class ReceiptService {
 }
 
 class NotificationService {
-    void sendSMS() {
-        System.out.println("SMS sent");
+    void notifyUser() {
+        System.out.println("Notification sent");
     }
 }
 
@@ -133,11 +120,11 @@ class PaymentService {
     private ReceiptService receipt = new ReceiptService();
     private NotificationService notification = new NotificationService();
 
-    public void process(String type, double amount) {
+    public void process(double amount) {
         validator.validate(amount);
         System.out.println("Processing payment");
         receipt.generate();
-        notification.sendSMS();
+        notification.notifyUser();
     }
 }
 ```
@@ -148,24 +135,22 @@ class PaymentService {
 
 Now:
 
-* Change SMS → modify NotificationService only.
-* Change receipt → modify ReceiptService only.
-
-Each class has one job.
+* Change receipt → modify `ReceiptService`
+* Change notification → modify `NotificationService`
+* Payment logic remains untouched
 
 ---
 
 ## Common Mistakes
 
-* Making one big “Service” class.
-* Mixing business logic with infrastructure logic.
+* One large “Service” class.
+* Mixing business and infrastructure code.
 
 ---
 
 ## Best Practices
 
-* Separate validation.
-* Separate communication.
+* Extract collaborators.
 * Keep service as coordinator only.
 
 ---
@@ -182,56 +167,41 @@ One class → one responsibility.
 
 ## Concept
 
-You should add new features **without modifying old code**.
+Open for extension, closed for modification.
 
 ---
 
 ## Scenario
 
-Bank introduces new payment type: WALLET.
+Add new payment type: WALLET.
 
 ---
 
 ## Goal
 
-Add Wallet payment without editing PaymentService.
+Add new type without editing existing code.
 
 ---
 
 ## What Can Go Wrong
 
-If you keep using:
-
-```java
-if(type.equals("CARD")) ...
-```
-
-You must edit this every time.
-
-Risk:
-
-* Break existing logic
-* Increase bugs
+If using `if-else`, every new type modifies existing code.
 
 ---
 
 ## ❌ Incorrect Example
 
 ```java
-if (type.equals("CARD")) {
-    System.out.println("Card payment");
-} else if (type.equals("UPI")) {
-    System.out.println("UPI payment");
-} else if (type.equals("WALLET")) {
-    System.out.println("Wallet payment");
-}
+if(type.equals("CARD")) ...
+else if(type.equals("UPI")) ...
+else if(type.equals("WALLET")) ...
 ```
 
 ---
 
 ## Why It Fails
 
-Every new payment → modify this block.
+Every new feature changes old code.
 
 ---
 
@@ -265,16 +235,30 @@ class PaymentService {
 
 ## Explanation
 
-To add new payment:
+To add new type:
 
 * Create new class.
-* Do not modify existing code.
+* No modification needed.
+
+---
+
+## Common Mistakes
+
+* Large conditional blocks.
+* Modifying old tested classes.
+
+---
+
+## Best Practices
+
+* Use interfaces.
+* Prefer polymorphism.
 
 ---
 
 ## Key Takeaways
 
-Avoid large if-else chains.
+Extend by adding new classes.
 
 ---
 
@@ -290,7 +274,7 @@ Child class must behave like parent.
 
 ## Scenario
 
-We expect every PaymentMethod to process payment.
+Every payment method must process payment.
 
 ---
 
@@ -310,26 +294,41 @@ class FreePayment implements PaymentMethod {
 
 Caller expects pay() to work.
 
-But this breaks behavior.
-
-In banking, this could:
-
-* Break transaction flow
-* Skip debit step
+But this breaks contract.
 
 ---
 
-## ✅ Correct Approach
+## ✅ Correct Implementation
 
-Only create subclasses that truly support payment.
+Only create valid implementations.
 
-Or create proper abstraction.
+Or redesign abstraction if behavior differs.
 
 ---
 
-## Key Takeaway
+## Explanation
 
-If it cannot behave like parent, don’t inherit.
+If a class cannot follow base contract, it should not implement that interface.
+
+---
+
+## Common Mistakes
+
+* Forcing inheritance.
+* Throwing unsupported exceptions in subclass.
+
+---
+
+## Best Practices
+
+* Ensure subclass honors parent behavior.
+* Design clear contracts.
+
+---
+
+## Key Takeaways
+
+Subtypes must be substitutable.
 
 ---
 
@@ -339,7 +338,13 @@ If it cannot behave like parent, don’t inherit.
 
 ## Concept
 
-Do not force classes to implement unused methods.
+Clients should not depend on methods they don’t use.
+
+---
+
+## Scenario
+
+Some payment types support refund, some don’t.
 
 ---
 
@@ -349,23 +354,16 @@ Do not force classes to implement unused methods.
 interface PaymentOperations {
     void pay();
     void refund();
-    void generateReport();
 }
 ```
 
-Some payment types may not support refund.
+Some classes may not support refund.
 
 ---
 
 ## Why It Fails
 
-They will write:
-
-```java
-throw new UnsupportedOperationException();
-```
-
-Bad design.
+They must implement unused methods.
 
 ---
 
@@ -381,13 +379,31 @@ interface Refundable {
 }
 ```
 
-Small, focused interfaces.
+---
+
+## Explanation
+
+Classes implement only what they need.
 
 ---
 
-## Key Takeaway
+## Common Mistakes
 
-Keep interfaces small and specific.
+* Creating large interfaces.
+* Mixing unrelated methods.
+
+---
+
+## Best Practices
+
+* Keep interfaces small.
+* Focus on single capability.
+
+---
+
+## Key Takeaways
+
+Small interfaces are better.
 
 ---
 
@@ -397,7 +413,13 @@ Keep interfaces small and specific.
 
 ## Concept
 
-High-level class should not depend on concrete class.
+High-level modules should depend on abstraction, not concrete classes.
+
+---
+
+## Scenario
+
+PaymentService directly creates CardPayment.
 
 ---
 
@@ -405,6 +427,7 @@ High-level class should not depend on concrete class.
 
 ```java
 class PaymentService {
+
     private CardPayment card = new CardPayment();
 
     public void process(double amount) {
@@ -417,9 +440,9 @@ class PaymentService {
 
 ## Why It Fails
 
-* Cannot switch gateway
-* Hard to test
-* Tightly coupled
+* Hard to test.
+* Cannot switch implementation.
+* Tight coupling.
 
 ---
 
@@ -428,7 +451,7 @@ class PaymentService {
 ```java
 class PaymentService {
 
-    private final PaymentMethod method;
+    private PaymentMethod method;
 
     PaymentService(PaymentMethod method) {
         this.method = method;
@@ -440,18 +463,40 @@ class PaymentService {
 }
 ```
 
-Now you can inject:
+---
 
-* CardPayment
-* WalletPayment
-* MockPayment
+## Explanation
+
+Now:
+
+* Can inject CardPayment.
+* Can inject WalletPayment.
+* Can inject MockPayment for testing.
 
 ---
 
-## Key Takeaway
+## Common Mistakes
 
-Depend on interface, not concrete class.
+* Using `new` inside business classes.
+* Not using abstraction.
 
 ---
 
+## Best Practices
 
+* Depend on interfaces.
+* Inject dependencies via constructor.
+
+---
+
+# 🏁 Final Summary
+
+| Principle | Problem                   | Solution               |
+| --------- | ------------------------- | ---------------------- |
+| SRP       | One class doing many jobs | Split responsibilities |
+| OCP       | if-else modification      | Use polymorphism       |
+| LSP       | Subclass breaks contract  | Respect behavior       |
+| ISP       | Large interface           | Split into smaller     |
+| DIP       | Concrete dependency       | Depend on abstraction  |
+
+---

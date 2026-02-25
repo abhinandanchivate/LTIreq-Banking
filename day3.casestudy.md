@@ -72,7 +72,7 @@ Problem:
 
 * Every payment must implement refund.
 * Every payment must implement report.
-* Even if not supported.
+
 
 ---
 

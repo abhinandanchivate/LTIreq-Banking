@@ -500,131 +500,127 @@ Removed --> [*]
 Good 👍
 Now we move to the **second subtopic** and apply **exactly the same structure**.
 
-Subtopic 2 from your list:
+Below is the **complete, clean, aligned section for Subtopic 2 – Persistence Context**, rebuilt fully in your required structure and including the **missing “before vs after identity map explanation”**.
+
+This follows **exactly your format**:
+
+```
+What
+Why
+When
+Where
+How
+Architecture Diagram
+Scenario
+Goal
+What Can Go Wrong
+Why It Fails
+Correct Approach
+Key Principles
+Correct Implementation
+Execution Flow
+Common Mistakes
+Best Practices
+Decision Matrix
+```
+
+Topic:
 
 ```
 Persistence Context
 ```
 
-This is one of the **most critical topics for 5+ year engineers**, because many production bugs come from misunderstanding it.
-
 ---
 
-# Subtopic 2
-
-# Persistence Context
+# Subtopic 2 — Persistence Context
 
 ---
 
 # 1. What
 
-A **Persistence Context** is the **runtime environment where Hibernate manages entity instances**.
+A **Persistence Context** is the runtime environment where **Hibernate manages entity instances and tracks their state**.
 
-It is essentially a **first-level cache + change tracking system** that exists within the **EntityManager**.
-
-It ensures that:
+It acts as:
 
 ```
-One database row
-=
-One entity instance
+First-level cache
+Entity lifecycle manager
+Change tracking system
 ```
 
-within a transaction.
+The persistence context ensures that **each database row is represented by only one entity instance within a transaction**.
 
 Example:
 
 ```java
-Wallet wallet = entityManager.find(Wallet.class, 10L);
+Wallet wallet1 = entityManager.find(Wallet.class, 10L);
 Wallet wallet2 = entityManager.find(Wallet.class, 10L);
 ```
 
-Both variables reference **the same Java object**.
+Result:
 
 ```
-wallet == wallet2  → true
+wallet1 == wallet2 → true
 ```
 
-This behavior is known as the **Identity Map pattern**.
+This behavior is called the **Identity Map pattern**.
 
 ---
 
 # 2. Why
 
-Persistence Context exists to solve three critical problems:
+Persistence Context solves three major problems in ORM systems.
 
-### 1. Prevent Duplicate Objects
+### 1. Prevent duplicate objects
 
-Without a persistence context:
-
-```
-SELECT wallet id=10
-SELECT wallet id=10
-```
-
-would create two different objects.
-
-That breaks consistency.
-
----
+Without a persistence context, two queries could create two different objects for the same database row.
 
 ### 2. Enable Dirty Checking
 
 Hibernate must track entity changes.
 
-Persistence Context stores:
+Persistence context stores:
 
 ```
 Entity instance
 Snapshot copy
 ```
 
-so modifications can be detected.
+so it can compare values later.
 
----
+### 3. Reduce database calls
 
-### 3. Reduce Database Calls
-
-Example:
-
-```
-find wallet
-find wallet again
-```
-
-Second call is served from **first-level cache**.
-
-No SQL executed.
+If an entity is already loaded, Hibernate retrieves it from the persistence context instead of executing another query.
 
 ---
 
 # 3. When
 
-A Persistence Context is created when:
+A persistence context is created when:
 
 ```
-Transaction starts
+Transaction begins
 OR
 EntityManager is opened
 ```
 
-Example in Spring:
+Example:
 
 ```java
 @Transactional
 public void processPayment() {
 ```
 
-Spring creates:
+Spring automatically creates:
 
 ```
 Persistence Context
 ```
 
-When the method finishes:
+When the transaction completes:
 
 ```
-Transaction commit
+commit
 ↓
 Persistence Context closed
 ```
@@ -635,7 +631,7 @@ Persistence Context closed
 
 Persistence Context exists inside **EntityManager**.
 
-Architecture view:
+Architecture placement:
 
 ```mermaid
 flowchart TD
@@ -644,28 +640,28 @@ Controller --> Service
 Service --> TransactionManager
 TransactionManager --> EntityManager
 EntityManager --> PersistenceContext
-PersistenceContext --> Hibernate
-Hibernate --> JDBC
+PersistenceContext --> HibernateEngine
+HibernateEngine --> JDBC
 JDBC --> Database
 ```
 
-The persistence context lives **within the scope of the transaction**.
+It lives **within the scope of a transaction**.
 
 ---
 
 # 5. How
 
-Internally Hibernate maintains several data structures.
+Hibernate maintains internal structures to manage entities.
 
-Persistence Context stores:
+Persistence Context internally stores:
 
 ```
-Entity Map
-Entity Snapshot Map
-Entity State Map
+Identity Map
+Entity Snapshots
+Entity State
 ```
 
-Example structure:
+Conceptual structure:
 
 ```
 PersistenceContext
@@ -674,26 +670,26 @@ PersistenceContext
  └── entityStates
 ```
 
-Example:
+Example entry:
 
 ```
-Wallet id=10 → Entity instance
+Wallet#10 → Wallet@A1
 Snapshot → balance=1000
 ```
 
-When the entity changes:
+When entity changes:
 
 ```
-balance=1500
+wallet.balance=1500
 ```
 
-Hibernate compares snapshot and entity.
+Hibernate compares snapshot and entity values.
 
 ---
 
 # 6. Architecture Diagram
 
-Internal persistence context structure.
+Persistence context internal structure.
 
 ```mermaid
 flowchart TD
@@ -711,17 +707,147 @@ IdentityMap --> Customer
 
 Components:
 
-| Component        | Purpose                            |
-| ---------------- | ---------------------------------- |
-| IdentityMap      | ensures single instance per entity |
-| SnapshotStore    | stores original entity values      |
-| DirtyCheckEngine | detects modifications              |
+| Component        | Purpose                        |
+| ---------------- | ------------------------------ |
+| IdentityMap      | ensures single entity instance |
+| SnapshotStore    | stores original values         |
+| DirtyCheckEngine | detects modifications          |
+
+---
+
+# Persistence Context Identity Map
+
+## Before vs After
+
+Understanding Identity Map requires seeing **what happens without it** and **what happens with it**.
+
+---
+
+# BEFORE — Without Persistence Context
+
+Example using direct JDBC:
+
+```java
+Wallet wallet1 = jdbcRepository.findById(10);
+Wallet wallet2 = jdbcRepository.findById(10);
+```
+
+Database calls:
+
+```
+SELECT * FROM wallet WHERE id=10
+SELECT * FROM wallet WHERE id=10
+```
+
+Objects created:
+
+```
+wallet1 → Wallet@A1
+wallet2 → Wallet@B2
+```
+
+Result:
+
+```
+wallet1 == wallet2 → false
+```
+
+### Problem
+
+Application now holds **two objects representing the same database row**.
+
+Example:
+
+```
+wallet1.balance = 1000
+wallet2.balance = 1500
+```
+
+State becomes inconsistent.
+
+---
+
+### Diagram — Without Identity Map
+
+```mermaid
+flowchart TD
+
+DB[(Wallet Row id=10)]
+
+Query1 --> WalletObj1
+Query2 --> WalletObj2
+
+WalletObj1["Wallet Object A"]
+WalletObj2["Wallet Object B"]
+
+DB --> Query1
+DB --> Query2
+```
+
+---
+
+# AFTER — With Persistence Context
+
+Hibernate uses **Identity Map inside Persistence Context**.
+
+Example:
+
+```java
+Wallet wallet1 = entityManager.find(Wallet.class, 10L);
+Wallet wallet2 = entityManager.find(Wallet.class, 10L);
+```
+
+First call:
+
+```
+SELECT * FROM wallet WHERE id=10
+```
+
+Hibernate stores entity:
+
+```
+PersistenceContext
+ Wallet#10 → Wallet@A1
+```
+
+Second call:
+
+Hibernate checks persistence context first.
+
+Result:
+
+```
+wallet1 == wallet2 → true
+```
+
+---
+
+### Diagram — With Persistence Context
+
+```mermaid
+flowchart TD
+
+DB[(Wallet Row id=10)]
+
+PersistenceContext --> WalletEntity
+
+WalletEntity["Wallet Object A"]
+
+Service --> PersistenceContext
+PersistenceContext --> DB
+```
+
+Meaning:
+
+```
+Row id=10 → exactly one Java object
+```
 
 ---
 
 # 7. Scenario
 
-SecurePayment Gateway loads wallet during payment.
+SecurePayment Gateway loads a wallet during payment processing.
 
 ```java
 Wallet wallet = walletRepository.findById(10L);
@@ -733,15 +859,13 @@ Later in the same transaction:
 Wallet wallet2 = walletRepository.findById(10L);
 ```
 
-Expected behavior:
+Expected:
 
 ```
 wallet == wallet2
 ```
 
-No second SQL query executed.
-
-Persistence context returns cached entity.
+Second query is served from persistence context cache.
 
 ---
 
@@ -751,16 +875,16 @@ Understand how persistence context ensures:
 
 ```
 entity identity
-change tracking
-SQL synchronization
+automatic change tracking
+database synchronization
 ```
 
-so developers avoid issues like:
+and prevents:
 
 ```
-duplicate entity instances
-unexpected SQL queries
+duplicate entity objects
 lost updates
+unnecessary queries
 ```
 
 ---
@@ -791,10 +915,10 @@ But entity is **detached**.
 
 # 10. Why It Fails
 
-Persistence context closed after transaction.
+When transaction closes:
 
 ```
-PersistenceContext destroyed
+Persistence Context destroyed
 ```
 
 Entity becomes:
@@ -809,7 +933,7 @@ Hibernate no longer tracks changes.
 
 # 11. Correct Approach
 
-Always perform entity modifications **inside transactional boundary**.
+Always modify entities inside **transactional boundaries**.
 
 Example:
 
@@ -824,7 +948,7 @@ public void updateWallet(Long walletId) {
 }
 ```
 
-Hibernate automatically detects changes.
+Hibernate will detect changes and update database.
 
 ---
 
@@ -832,13 +956,13 @@ Hibernate automatically detects changes.
 
 1️⃣ Persistence Context exists **per transaction**
 
-2️⃣ It acts as **first-level cache**
+2️⃣ It implements **Identity Map pattern**
 
 3️⃣ Only **managed entities are tracked**
 
-4️⃣ Persistence context ensures **entity identity**
+4️⃣ It stores **entity snapshots**
 
-5️⃣ It stores **snapshots for dirty checking**
+5️⃣ It acts as **first-level cache**
 
 ---
 
@@ -862,7 +986,7 @@ public class WalletService {
 }
 ```
 
-Hibernate will execute SQL automatically.
+Hibernate automatically generates SQL.
 
 ---
 
@@ -876,7 +1000,6 @@ sequenceDiagram
 participant Service
 participant EntityManager
 participant PersistenceContext
-participant Hibernate
 participant Database
 
 Service->>EntityManager: findById()
@@ -885,95 +1008,85 @@ EntityManager->>PersistenceContext: check identity map
 
 PersistenceContext->>Database: SELECT wallet
 
-Database->>PersistenceContext: result
+Database->>PersistenceContext: row
 
-PersistenceContext->>Service: return entity
+PersistenceContext->>Service: Wallet instance
 
 Service->>EntityManager: modify entity
 
-EntityManager->>Hibernate: flush()
+EntityManager->>PersistenceContext: mark dirty
 
-Hibernate->>Database: UPDATE wallet
+EntityManager->>Database: UPDATE wallet
 ```
 
 ---
 
 # 15. Common Mistakes
 
-### Assuming EntityManager is Stateless
+### Using entities outside transactions
 
-It actually holds persistence context.
-
----
-
-### Using Entities Outside Transactions
-
-Detached entities cause silent failures.
+Entities become detached.
 
 ---
 
-### Ignoring First-Level Cache
+### Ignoring first-level cache
 
-Repeated queries inside same transaction do not hit DB.
+Developers expect repeated queries.
+
+---
+
+### Long persistence contexts
+
+Large transactions increase memory usage.
 
 ---
 
 # 16. Best Practices
 
-Keep persistence context **short-lived**.
+Keep persistence contexts **short-lived**.
 
 Use **service-layer transactions**.
 
-Avoid long-running transactions.
+Avoid loading large datasets in a single transaction.
 
-Monitor Hibernate statistics:
-
-```
-hibernate.entity.load.count
-hibernate.session.open.count
-```
+Enable Hibernate statistics during debugging.
 
 ---
 
 # 17. Decision Matrix
 
-| Situation                  | Recommended Approach              |
-| -------------------------- | --------------------------------- |
-| Load entity multiple times | rely on persistence context cache |
-| Modify entity              | ensure transaction active         |
-| Long processing tasks      | avoid large persistence context   |
-| Batch operations           | flush & clear periodically        |
+| Situation                       | Recommended Approach         |
+| ------------------------------- | ---------------------------- |
+| Load same entity multiple times | rely on persistence context  |
+| Modify entity                   | ensure transaction active    |
+| Batch operations                | flush and clear periodically |
+| Large transactions              | break into smaller units     |
 
 ---
 
-# Persistence Context Identity Map
+# Final Principle
 
-```mermaid
-flowchart TD
+Inside one persistence context:
 
-DBWallet[Wallet Row id=10]
-
-PersistenceContext --> WalletEntity
-
-WalletEntity --> DBWallet
+```
+Database Row → One Entity Instance
 ```
 
-Only **one entity instance exists per row per persistence context**.
+Across different transactions:
+
+```
+Transaction A → Wallet@A1
+Transaction B → Wallet@B2
+```
+
+These can be different objects.
 
 ---
 
-✅ Now we have covered **Subtopic 2 correctly**.
-
----
-
-Next subtopics remaining from your list:
+If you want, I can now generate the **next subtopic in the same full structure**:
 
 ```
-3️⃣ Dirty Checking
-4️⃣ Flush vs Commit
-5️⃣ Hibernate vs JPA behavioral differences
+Dirty Checking
 ```
 
-If you want, I can generate **Subtopic 3 (Dirty Checking)** next — which is actually the **most misunderstood Hibernate mechanism** and needs **internal algorithm diagrams**.
-
-
+(which will include **Hibernate internal algorithm, snapshot comparison, flush lifecycle, and SQL generation flow**).
